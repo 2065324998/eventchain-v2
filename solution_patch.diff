@@ -1,0 +1,61 @@
+diff --git a/eventchain/account.py b/eventchain/account.py
+--- a/eventchain/account.py
++++ b/eventchain/account.py
+@@ -78,12 +78,42 @@ def calculate_fee(amount: Decimal, currency: str,
+     """Calculate the transaction fee using tiered rates.
+
+     When a transaction's USD-equivalent value crosses a tier boundary,
+-    the fee should be split proportionally: the portion of the amount
+-    within each tier is charged at that tier's rate.
++    the fee is split proportionally: the portion of the transaction
++    falling within each tier is charged at that tier's rate.
+
+     The fee is calculated in the native currency of the transaction.
+     """
+-    rate = get_fee_rate(cumulative_volume_usd)
+-    fee = (amount * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+-    return fee
++    amount_usd = to_usd(amount, currency)
++
++    if amount_usd <= Decimal("0"):
++        return Decimal("0")
++
++    remaining_usd = amount_usd
++    total_fee = Decimal("0")
++    current_volume = cumulative_volume_usd
++
++    for threshold, rate in FEE_TIERS:
++        if remaining_usd <= Decimal("0"):
++            break
++
++        # How much USD-equivalent volume fits in this tier
++        space_in_tier = threshold - current_volume
++        if space_in_tier <= Decimal("0"):
++            continue
++
++        # Take the smaller of remaining amount and space in tier
++        portion_usd = min(remaining_usd, space_in_tier)
++
++        # Convert this USD portion back to native currency proportion
++        native_portion = amount * (portion_usd / amount_usd)
++
++        # Apply this tier's rate to the native currency portion
++        total_fee += native_portion * rate
++
++        remaining_usd -= portion_usd
++        current_volume += portion_usd
++
++    return total_fee.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+@@ -183,6 +213,10 @@ class BankAccount(AggregateRoot):
+
+         refund_total = amount + original_fee
+
++        # Reverse the volume contribution of the refunded transaction
++        amount_usd = to_usd(amount, currency)
++        self.cumulative_volume_usd -= amount_usd
++
+         self.balances[currency] = self.get_balance(currency) + refund_total
+         self.total_fees_paid -= original_fee
+         self.transaction_count += 1

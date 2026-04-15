@@ -77,13 +77,10 @@ def get_fee_rate(cumulative_volume_usd: Decimal) -> Decimal:
 
 def calculate_fee(amount: Decimal, currency: str,
                   cumulative_volume_usd: Decimal) -> Decimal:
-    """Calculate the transaction fee using tiered rates.
+    """Calculate the transaction fee.
 
-    When a transaction's USD-equivalent value crosses a tier boundary,
-    the fee should be split proportionally: the portion of the amount
-    within each tier is charged at that tier's rate.
-
-    The fee is calculated in the native currency of the transaction.
+    The fee rate is determined by the cumulative USD-equivalent volume,
+    but applied to the transaction amount in its native currency.
     """
     rate = get_fee_rate(cumulative_volume_usd)
     fee = (amount * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -154,11 +151,11 @@ class BankAccount(AggregateRoot):
         currency = event.data.get("currency", "USD")
         description = event.data.get("description", "Withdrawal")
 
-        # Fee based on volume before this transaction
-        fee = calculate_fee(amount, currency, self.cumulative_volume_usd)
-
-        # Convert to USD equivalent for volume tracking
+        # Convert to USD equivalent for volume tracking and fee calculation
         amount_usd = to_usd(amount, currency)
+
+        # Fee based on volume before this transaction
+        fee = calculate_fee(amount_usd, currency, self.cumulative_volume_usd)
 
         self.cumulative_volume_usd += amount_usd
         total_debit = amount + fee
