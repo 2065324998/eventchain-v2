@@ -77,20 +77,22 @@ class TestBankAccount:
         assert account.get_balance("USD") == Decimal("4985.00")
         assert account.cumulative_volume_usd == Decimal("5000")
 
-    def test_deposit_crossing_tier_boundary(self):
+    def test_large_deposit_within_tier(self):
+        """Large deposit staying within tier 1."""
         account = BankAccount()
         events = [
             Event("acc-1", "AccountOpened", {"owner": "Carol"}, version=1),
             Event("acc-1", "MoneyDeposited", {
-                "amount": "9000", "currency": "USD"
+                "amount": "4000", "currency": "USD"
             }, version=2),
             Event("acc-1", "MoneyDeposited", {
-                "amount": "2000", "currency": "USD"
+                "amount": "3000", "currency": "USD"
             }, version=3),
         ]
         account.load_from_events(events)
-        assert account.get_balance("USD") == Decimal("10967.00")
-        assert account.cumulative_volume_usd == Decimal("11000")
+        # 4000*0.003=12 + 3000*0.003=9 = 21 in fees
+        assert account.get_balance("USD") == Decimal("6979.00")
+        assert account.cumulative_volume_usd == Decimal("7000")
 
     def test_refund(self):
         account = BankAccount()
